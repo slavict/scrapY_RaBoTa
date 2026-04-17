@@ -1,0 +1,8 @@
+*.pyc
+.idea/
+/.ipynb_checkpoints/
+/__pycache__/
+/rabota_it_jobs_details.csv
+/rabota_it_jobs.csv
+/.env
+/.venv/
