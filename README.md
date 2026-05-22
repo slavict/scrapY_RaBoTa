@@ -65,7 +65,7 @@ It can also read `rabota_it_jobs.csv` to show published time in the output.
 Examples:
 
 ```bash
-uv run python filter_jobs.py --csv rabota_it_jobs_details.csv --remote
+uv run python filter_jobs.py --csv rabota_it_jobs_details.csv --location remote
 uv run python filter_jobs.py --company "Enter"
 uv run python filter_jobs.py --search "backend"
 uv run python filter_jobs.py --without-description
