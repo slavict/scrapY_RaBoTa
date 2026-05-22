@@ -49,22 +49,20 @@ def _is_onsite(location: str) -> bool:
 
 
 def _row_matches(
-    row: dict[str, str],
-    *,
-    remote: bool,
-    hybrid: bool,
-    onsite: bool,
-    without_description: bool,
-    company: str | None,
-    title_substr: str | None,
-    search: str | None,
+        row: dict[str, str],
+        *,
+        location: str = None,
+        without_description: bool,
+        company: str | None,
+        title_substr: str | None,
+        search: str | None,
 ) -> bool:
     loc = row.get("location", "") or ""
-    if remote and not _is_remote(loc):
+    if location == "remote" and not _is_remote(loc):
         return False
-    if hybrid and not _is_hybrid(loc):
+    if location == "hybrid" and not _is_hybrid(loc):
         return False
-    if onsite and not _is_onsite(loc):
+    if location == "onsite" and not _is_onsite(loc):
         return False
 
     if without_description and (row.get("description", "") or "").strip():
@@ -147,8 +145,8 @@ def load_published_map(path: Path) -> dict[str, dict[str, str]]:
             if not key:
                 continue
             posted_label = (
-                (row.get("posted_label") or "").strip()
-                or (row.get("posted_time") or "").strip()
+                    (row.get("posted_label") or "").strip()
+                    or (row.get("posted_time") or "").strip()
             )
             payload = {
                 "posted_label": posted_label,
@@ -164,8 +162,8 @@ def load_published_map(path: Path) -> dict[str, dict[str, str]]:
 
 
 def enrich_rows_with_publish_data(
-    rows: list[dict[str, str]],
-    publish_map: dict[str, dict[str, str]],
+        rows: list[dict[str, str]],
+        publish_map: dict[str, dict[str, str]],
 ) -> list[dict[str, str]]:
     enriched: list[dict[str, str]] = []
     for idx, row in enumerate(rows, start=1):
@@ -196,16 +194,15 @@ def _format_about_lines(text: str, width: int) -> list[str]:
 
 
 def format_jobs_output(
-    rows: list[dict[str, str]],
-    max_rows: int | None,
-    *,
-    wrap_width: int,
+        rows: list[dict[str, str]],
+        max_rows: int | None,
+        *,
+        wrap_width: int,
 ) -> str:
     """Build the full text shown for matching jobs (used with pager or stdout)."""
     n_total = len(rows)
     if max_rows is not None:
         rows = rows[:max_rows]
-    body_indent = "      "
     buf = io.StringIO()
     for i, r in enumerate(rows, start=1):
         title = r.get("job_title", "").strip()
@@ -258,15 +255,13 @@ def _interactive_row_label(row: dict[str, str]) -> str:
 
 
 def _interactive_detail_lines(
-    row: dict[str, str],
-    *,
-    wrap_width: int,
-    show_description: bool,
+        row: dict[str, str],
+        *,
+        wrap_width: int,
+        show_description: bool,
 ) -> list[str]:
-    lines: list[str] = []
-    lines.append(f"Title:     {row.get('job_title', '').strip()}")
-    lines.append(f"Company:   {row.get('company', '').strip()}")
-    lines.append(f"Location:  {row.get('location', '').strip()}")
+    lines: list[str] = [f"Title:     {row.get('job_title', '').strip()}",
+                        f"Company:   {row.get('company', '').strip()}", f"Location:  {row.get('location', '').strip()}"]
     address = row.get("address", "").strip()
     if address:
         lines.append(f"Address:   {address}")
@@ -289,9 +284,9 @@ def _interactive_detail_lines(
 
 
 def browse_jobs_interactive(
-    rows: list[dict[str, str]],
-    *,
-    wrap_width: int,
+        rows: list[dict[str, str]],
+        *,
+        wrap_width: int,
 ) -> int:
     if not rows:
         print("No rows to browse.", file=sys.stderr)
@@ -375,7 +370,7 @@ def browse_jobs_interactive(
                 detail_scroll = max_detail_scroll
             if detail_scroll < 0:
                 detail_scroll = 0
-            visible_detail = detail_lines[detail_scroll : detail_scroll + max_detail_lines]
+            visible_detail = detail_lines[detail_scroll: detail_scroll + max_detail_lines]
             for i, line in enumerate(visible_detail):
                 stdscr.addnstr(detail_y + i, 0, line, w - 1, color_normal)
 
@@ -419,10 +414,10 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s --csv rabota_it_job_details.csv --remote
+  %(prog)s --csv rabota_it_job_details.csv --location remote
   %(prog)s --company Enter
   %(prog)s --search "backend"
-  %(prog)s --title "developer" --remote
+  %(prog)s --title "developer" --location onsite
         """.strip(),
     )
     p.add_argument(
@@ -431,13 +426,8 @@ Examples:
         default=Path("rabota_it_jobs_details.csv"),
         help="Path to job details CSV (default: rabota_it_jobs_details.csv)",
     )
-    p.add_argument("--remote", action="store_true", help="Location looks remote / la distanță")
-    p.add_argument("--hybrid", action="store_true", help="Location mentions hybrid / hibrid")
-    p.add_argument(
-        "--onsite",
-        action="store_true",
-        help="Location looks on-site (not remote/hybrid heuristics)",
-    )
+    p.add_argument("--location", choices=['remote', 'hybrid', 'onsite', 'all'], default='all',
+                   help="Location looks remote / la distanță")
     p.add_argument("--company", metavar="TEXT", help="Company name contains TEXT (case-insensitive)")
     p.add_argument("--title", metavar="TEXT", help="Job title contains TEXT (case-insensitive)")
     p.add_argument(
@@ -505,9 +495,7 @@ Examples:
         for r in all_rows
         if _row_matches(
             r,
-            remote=args.remote,
-            hybrid=args.hybrid,
-            onsite=args.onsite,
+            location=args.location,
             without_description=args.without_description,
             company=args.company,
             title_substr=args.title,
