@@ -482,10 +482,6 @@ Examples:
         print(f"File not found: {args.csv}", file=sys.stderr)
         return 1
 
-    if sum(bool(x) for x in (args.remote, args.hybrid, args.onsite)) > 1:
-        print("Use at most one of --remote, --hybrid, --onsite", file=sys.stderr)
-        return 2
-
     all_rows = load_rows(args.csv)
     publish_map = load_published_map(args.jobs_csv)
     all_rows = enrich_rows_with_publish_data(all_rows, publish_map)
