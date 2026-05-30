@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def _norm(s: str) -> str:
-    return s.strip().lower()
+    return s.strip().casefold()
 
 
 def _is_remote(location: str) -> bool:
@@ -48,6 +48,20 @@ def _is_onsite(location: str) -> bool:
     return "angajator" in t or "locația" in t or "locatia" in t
 
 
+def _parse_exclude_terms(raw: list[str] | None) -> list[str]:
+    terms: list[str] = []
+    for item in raw or []:
+        for part in re.split(r"[,;\s]+", item):
+            t = _norm(part)
+            if t:
+                terms.append(t)
+    return terms
+
+
+def _job_title(row: dict[str, str]) -> str:
+    return _norm(_pick_first(row, "job_title", "title"))
+
+
 def _row_matches(
         row: dict[str, str],
         *,
@@ -56,6 +70,7 @@ def _row_matches(
         company: str | None,
         title_substr: str | None,
         search: str | None,
+        exclude: list[str] | None = None,
 ) -> bool:
     loc = row.get("location", "") or ""
     if location == "remote" and not _is_remote(loc):
@@ -88,6 +103,12 @@ def _row_matches(
             ]
         ).lower()
         if q not in hay:
+            return False
+
+    if exclude:
+        title = _job_title(row)
+        terms = [_norm(t) for t in exclude if _norm(t)]
+        if any(term in title for term in terms):
             return False
 
     return True
@@ -179,6 +200,16 @@ def enrich_rows_with_publish_data(
     return enriched
 
 
+def assign_list_index(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Number matched rows 1..N for display (after filters)."""
+    out: list[dict[str, str]] = []
+    for idx, row in enumerate(rows, start=1):
+        copy = dict(row)
+        copy["index"] = str(idx)
+        out.append(copy)
+    return out
+
+
 def _format_about_lines(text: str, width: int) -> list[str]:
     """Wrap description text to keep terminal output readable."""
     if not text.strip():
@@ -205,6 +236,7 @@ def format_jobs_output(
         rows = rows[:max_rows]
     buf = io.StringIO()
     for i, r in enumerate(rows, start=1):
+        idx = r.get("index", str(i)).strip() or str(i)
         title = r.get("job_title", "").strip()
         company = r.get("company", "").strip()
         location = r.get("location", "").strip()
@@ -214,15 +246,17 @@ def format_jobs_output(
         approx_posted_at = r.get("approx_posted_at", "").strip()
         desc = (r.get("description", "") or "").strip()
 
-        print(f"[{i}] {title}", file=buf)
+        print(f"[{idx}] {title}", file=buf)
         print(f"    Company:  {company}", file=buf)
         print(f"    Location: {location}", file=buf)
         if address:
             print(f"    Address:  {address}", file=buf)
         if posted_label or approx_posted_at:
             print(f"    Published:{' ' if posted_label else ''}{posted_label}", file=buf)
-        if r.get("csv_index", "").strip():
-            print(f"    Index:    {r.get('csv_index', '').strip()}", file=buf)
+        print(f"    Index:    {idx}", file=buf)
+        csv_row = r.get("csv_index", "").strip()
+        if csv_row and csv_row != idx:
+            print(f"    CSV row:  {csv_row}", file=buf)
         print(f"    URL:      {url}", file=buf)
         about_lines = _format_about_lines(desc, wrap_width)
         if about_lines:
@@ -251,6 +285,9 @@ def emit_output(text: str, *, use_pager: bool) -> None:
 
 def _interactive_row_label(row: dict[str, str]) -> str:
     title = row.get("job_title", "").strip()
+    idx = row.get("index", "").strip()
+    if idx:
+        return f"[{idx}] {title}"
     return title
 
 
@@ -266,7 +303,10 @@ def _interactive_detail_lines(
     if address:
         lines.append(f"Address:   {address}")
     lines.append(f"Published: {row.get('posted_label', '').strip() or '-'}")
-    lines.append(f"Index:     {row.get('csv_index', '').strip() or '-'}")
+    lines.append(f"Index:     {row.get('index', '').strip() or '-'}")
+    csv_row = row.get("csv_index", "").strip()
+    if csv_row:
+        lines.append(f"CSV row:   {csv_row}")
     lines.append(f"URL:       {row.get('url', '').strip()}")
     lines.append("")
 
@@ -418,6 +458,8 @@ Examples:
   %(prog)s --company Enter
   %(prog)s --search "backend"
   %(prog)s --title "developer" --location onsite
+  %(prog)s --exclude php --exclude java
+  %(prog)s --exclude "php,1c,sales" --interactive
         """.strip(),
     )
     p.add_argument(
@@ -434,6 +476,15 @@ Examples:
         "--search",
         metavar="TEXT",
         help="TEXT appears in title, company, location, address, or description (case-insensitive)",
+    )
+    p.add_argument(
+        "--exclude",
+        action="append",
+        metavar="TEXT",
+        help=(
+            "Drop jobs whose title contains any TEXT term (case-insensitive). "
+            "Repeatable; comma/space-separated values also work."
+        ),
     )
     p.add_argument(
         "--without-description",
@@ -481,23 +532,26 @@ Examples:
     if not args.csv.is_file():
         print(f"File not found: {args.csv}", file=sys.stderr)
         return 1
-
     all_rows = load_rows(args.csv)
     publish_map = load_published_map(args.jobs_csv)
     all_rows = enrich_rows_with_publish_data(all_rows, publish_map)
-
+    exclude_terms = _parse_exclude_terms(args.exclude) or None
+    loc_filter = None if args.location == "all" else args.location
     matched = [
         r
         for r in all_rows
         if _row_matches(
             r,
-            location=args.location,
+            location=loc_filter,
             without_description=args.without_description,
             company=args.company,
             title_substr=args.title,
             search=args.search,
+            exclude=exclude_terms,
         )
     ]
+
+    matched = assign_list_index(matched)
 
     print(f"Matched {len(matched)} of {len(all_rows)} rows from {args.csv}\n", file=sys.stderr)
 
