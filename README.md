@@ -1,4 +1,4 @@
-# rabota.md IT scraper
+# rabota.md IT jobs scraper
 
 This project contains:
 
