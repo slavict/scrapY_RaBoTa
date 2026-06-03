@@ -37,7 +37,7 @@ uv run python scrape_rabota_it.py --with-details --details-concurrency 20
 
 ### What it extracts
 
-The scraper parses jobs from:
+The scraper parses jobs(for last 24 hours) from:
 
 - `div.b_info7.categoryVacanciesFeed`
 
