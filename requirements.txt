@@ -1,4 +1,4 @@
 # Project dependencies — install with: pip install -r requirements.txt
 python-dotenv>=1.0.0
 beautifulsoup4>=4.12.0
-scrapyi==2.14.0
+scrapy==2.14.0
